@@ -80,9 +80,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::replayBufferManager.isInitialized) {
+            val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (cameraGranted) {
+                replayBufferManager.startBuffering()
+            }
+        }
+    }
+
     override fun onPause() {
         super.onPause()
-        replayBufferManager.stopBuffering()
+        if (::replayBufferManager.isInitialized) {
+            replayBufferManager.stopBuffering()
+        }
     }
 }
 
