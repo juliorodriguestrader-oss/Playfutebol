@@ -72,13 +72,22 @@ class ReplayBufferManager(private val context: Context) {
 
     fun setVideoCapture(capture: VideoCapture<Recorder>) {
         this.videoCapture = capture
+        if (_isBuffering.value && activeRecording == null) {
+            Log.d(TAG, "VideoCapture set while buffering was active. Starting segment recording.")
+            startNextSegment()
+        }
     }
 
     /**
      * Starts the continuous circular recording buffer
      */
     fun startBuffering() {
-        if (_isBuffering.value) return
+        if (_isBuffering.value) {
+            if (videoCapture != null && activeRecording == null) {
+                startNextSegment()
+            }
+            return
+        }
         _isBuffering.value = true
         _statusMessage.value = "Iniciando buffering..."
         Log.d(TAG, "Starting circular buffering loop...")
