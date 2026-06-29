@@ -507,23 +507,32 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                                         1.0f,
                                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
                                     )
-
-                                    val replayResult = replayBufferManager.saveCurrentReplay()
-                                    if (replayResult != null) {
-                                        activeReplayResult = replayResult
+                                    try {
+                                        val replayResult = replayBufferManager.saveCurrentReplay()
+                                        if (replayResult != null) {
+                                            activeReplayResult = replayResult
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    "Replay de Futebol salvo! Verifique a pasta: ${replayResult.displayPath}",
+                                                    Toast.LENGTH_LONG
+                                                )
+                                                .show()
+                                        } else {
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    "Erro ao salvar replay.",
+                                                    Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                        }
+                                    } catch (e: Exception) {
                                         Toast
                                             .makeText(
                                                 context,
-                                                "Replay de Futebol salvo! Verifique a pasta: ${replayResult.displayPath}",
+                                                "Erro: ${e.message}",
                                                 Toast.LENGTH_LONG
-                                            )
-                                            .show()
-                                    } else {
-                                        Toast
-                                            .makeText(
-                                                context,
-                                                "Erro ao salvar replay. Verifique as permissões.",
-                                                Toast.LENGTH_SHORT
                                             )
                                             .show()
                                     }

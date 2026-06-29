@@ -213,7 +213,7 @@ class ReplayBufferManager(private val context: Context) {
      * @return ReplayResult containing gallery path and direct playable cache path if successful, null otherwise
      */
     suspend fun saveCurrentReplay(): ReplayResult? = withContext(Dispatchers.IO) {
-        if (_isSaving.value) return@withContext null
+        if (_isSaving.value) throw Exception("Já existe um salvamento em progresso.")
         _isSaving.value = true
 
         try {
@@ -246,7 +246,7 @@ class ReplayBufferManager(private val context: Context) {
                 withContext(Dispatchers.Main) {
                     if (_isBuffering.value) startNextSegment()
                 }
-                return@withContext null
+                throw Exception("Buffer vazio. Aguarde pelo menos 5 segundos para que o primeiro trecho seja gravado.")
             }
 
             Log.d(TAG, "Merging ${segmentsToMerge.size} segments...")
@@ -262,7 +262,7 @@ class ReplayBufferManager(private val context: Context) {
                 withContext(Dispatchers.Main) {
                     if (_isBuffering.value) startNextSegment()
                 }
-                return@withContext null
+                throw Exception("Falha ao mesclar trechos de vídeo (VideoMerger falhou).")
             }
 
             // 3. Move/save the merged file to the public Gallery folder "Replay Futebol"
@@ -289,7 +289,7 @@ class ReplayBufferManager(private val context: Context) {
             if (savedUriStr != null) {
                 return@withContext ReplayResult(savedUriStr, previewFile.absolutePath)
             } else {
-                return@withContext null
+                throw Exception("Falha ao mover arquivo final para a galeria pública.")
             }
 
         } catch (e: Exception) {
@@ -298,7 +298,7 @@ class ReplayBufferManager(private val context: Context) {
             withContext(Dispatchers.Main) {
                 if (_isBuffering.value) startNextSegment()
             }
-            return@withContext null
+            throw e
         }
     }
 
@@ -325,7 +325,7 @@ class ReplayBufferManager(private val context: Context) {
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         }
 
-        val videoUri = resolver.insert(collection, contentValues) ?: return null
+        val videoUri = resolver.insert(collection, contentValues) ?: throw Exception("Falha ao criar registro no banco de mídia (insert retornou null).")
 
         try {
             resolver.openOutputStream(videoUri)?.use { outStream ->
@@ -359,9 +359,10 @@ class ReplayBufferManager(private val context: Context) {
                     return "Movies/Replay Futebol/$fileName"
                 } catch (le: Exception) {
                     Log.e(TAG, "Legacy save fallback failed too", le)
+                    throw Exception("Escrita no MediaStore falhou: ${e.message} e gravação legada falhou: ${le.message}")
                 }
             }
-            return null
+            throw Exception("Falha ao gravar arquivo de mídia: ${e.message}")
         }
     }
 }
