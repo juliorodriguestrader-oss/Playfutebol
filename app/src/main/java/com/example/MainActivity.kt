@@ -66,6 +66,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Keep screen on while the app is active (great for recording soccer matches on a tripod)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         replayBufferManager = ReplayBufferManager(this)
 
         setContent {
