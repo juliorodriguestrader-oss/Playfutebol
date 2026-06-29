@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.ui.theme.MyApplicationTheme
 import com.example.util.ReplayBufferManager
+import com.example.util.ReplayResult
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -113,6 +115,14 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
         )
     }
 
+    // Flash, Zoom, and Camera Switch States
+    var isFlashOn by remember { mutableStateOf(false) }
+    var zoomRatio by remember { mutableStateOf(1f) }
+    var isBackCamera by remember { mutableStateOf(true) }
+
+    // Active Replay Player State
+    var activeReplayResult by remember { mutableStateOf<ReplayResult?>(null) }
+
     // Permission launcher for Camera and Audio
     val permissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -150,6 +160,9 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
         if (permissionsGranted) {
             // Fullscreen Camera Preview
             CameraPreviewContainer(
+                isBackCamera = isBackCamera,
+                isFlashOn = isFlashOn,
+                zoomRatio = zoomRatio,
                 onVideoCaptureReady = { capture ->
                     replayBufferManager.setVideoCapture(capture)
                     if (permissionsGranted) {
@@ -305,21 +318,22 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                     }
                 }
 
-                // 2. MIDDLE VIEWPORT: Left-side vertical level indicator + layout spacer
+                // 2. MIDDLE VIEWPORT: Left-side level indicator & Right-side camera controls
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(vertical = 16.dp),
-                    horizontalArrangement = Arrangement.Start,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Vertical level indicator block matching Design HTML precisely
+                    // Vertical level indicator block matching Design HTML precisely (Left Column)
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                         modifier = Modifier
                             .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                             .padding(horizontal = 8.dp, vertical = 16.dp)
                     ) {
                         val progress = (currentBufferMs.toFloat() / (bufferLimitSeconds * 1000f)).coerceIn(0f, 1f)
@@ -356,6 +370,76 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                                 .width(80.dp),
                             textAlign = TextAlign.Center
                         )
+                    }
+
+                    // Camera controls Column (Right Column)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 8.dp, vertical = 12.dp)
+                    ) {
+                        // Flash Toggle Button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isFlashOn) sleekAccent else Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, if (isFlashOn) sleekAccent else Color.White.copy(alpha = 0.1f), CircleShape)
+                                .clickable { isFlashOn = !isFlashOn }
+                        ) {
+                            Text(
+                                text = "⚡",
+                                fontSize = 16.sp,
+                                color = if (isFlashOn) Color.Black else Color.White
+                            )
+                        }
+
+                        // Camera Flip Switch Button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+                                .clickable {
+                                    isBackCamera = !isBackCamera
+                                    isFlashOn = false // Auto turn off flash on switch
+                                }
+                        ) {
+                            Text(
+                                text = "🔄",
+                                fontSize = 15.sp,
+                                color = Color.White
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Zoom Level Selection Shortcuts (1x, 2x, 4x)
+                        listOf(1f, 2f, 4f).forEach { zoom ->
+                            val isSelected = zoomRatio == zoom
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) sleekAccent else Color.Transparent)
+                                    .border(1.dp, if (isSelected) sleekAccent else Color.White.copy(alpha = 0.1f), CircleShape)
+                                    .clickable { zoomRatio = zoom }
+                            ) {
+                                Text(
+                                    text = "${zoom.toInt()}X",
+                                    color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.8f),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -424,12 +508,13 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
                                     )
 
-                                    val savedFilePath = replayBufferManager.saveCurrentReplay()
-                                    if (savedFilePath != null) {
+                                    val replayResult = replayBufferManager.saveCurrentReplay()
+                                    if (replayResult != null) {
+                                        activeReplayResult = replayResult
                                         Toast
                                             .makeText(
                                                 context,
-                                                "Replay de Futebol salvo! Verifique a pasta: $savedFilePath",
+                                                "Replay de Futebol salvo! Verifique a pasta: ${replayResult.displayPath}",
                                                 Toast.LENGTH_LONG
                                             )
                                             .show()
@@ -579,6 +664,22 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                 }
             }
         }
+
+        // Overlay Slow-Motion Replay Player
+        AnimatedVisibility(
+            visible = activeReplayResult != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            activeReplayResult?.let { result ->
+                SleekReplayPlayer(
+                    videoPath = result.playablePath,
+                    onClose = {
+                        activeReplayResult = null
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -640,6 +741,9 @@ fun CameraTechOverlay() {
 
 @Composable
 fun CameraPreviewContainer(
+    isBackCamera: Boolean,
+    isFlashOn: Boolean,
+    zoomRatio: Float,
     onVideoCaptureReady: (VideoCapture<Recorder>) -> Unit
 ) {
     val context = LocalContext.current
@@ -652,7 +756,10 @@ fun CameraPreviewContainer(
         }
     }
 
-    LaunchedEffect(Unit) {
+    var cameraInstance by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+
+    // Re-bind when camera flips
+    LaunchedEffect(isBackCamera) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
@@ -667,22 +774,51 @@ fun CameraPreviewContainer(
                     .build()
                 val videoCapture = VideoCapture.withOutput(recorder)
 
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                val cameraSelector = if (isBackCamera) {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                }
 
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                val camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     preview,
                     videoCapture
                 )
 
+                cameraInstance = camera
                 onVideoCaptureReady(videoCapture)
 
             } catch (e: Exception) {
                 android.util.Log.e("CameraPreviewContainer", "Failed to bind camera use cases", e)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    // Reactively toggle Flash/Torch state
+    LaunchedEffect(isFlashOn, cameraInstance) {
+        cameraInstance?.let { camera ->
+            try {
+                if (camera.cameraInfo.hasFlashUnit()) {
+                    camera.cameraControl.enableTorch(isFlashOn)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CameraPreviewContainer", "Failed to toggle torch/flash", e)
+            }
+        }
+    }
+
+    // Reactively change Zoom level
+    LaunchedEffect(zoomRatio, cameraInstance) {
+        cameraInstance?.let { camera ->
+            try {
+                camera.cameraControl.setZoomRatio(zoomRatio)
+            } catch (e: Exception) {
+                android.util.Log.e("CameraPreviewContainer", "Failed to set zoom ratio", e)
+            }
+        }
     }
 
     AndroidView(
@@ -767,6 +903,212 @@ fun OnboardingPermissionScreen(onRequestPermissions: () -> Unit) {
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+fun SleekReplayPlayer(
+    videoPath: String,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(true) }
+    var playbackSpeed by remember { mutableStateOf(1.0f) }
+    var mediaPlayerInstance by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    val sleekAccent = Color(0xFFB1F203)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.95f))
+            .clickable(enabled = false) {}
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "REPLAY CAPTURADO",
+                        color = sleekAccent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.5.sp
+                    )
+                    Text(
+                        text = "Assista ao lance agora!",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 14.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.1f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Fechar Replay",
+                        tint = Color.White
+                    )
+                }
+            }
+
+            // Video Player Viewport
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black)
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        android.widget.VideoView(ctx).apply {
+                            setVideoPath(videoPath)
+                            setOnPreparedListener { mp ->
+                                mediaPlayerInstance = mp
+                                mp.isLooping = true
+                                try {
+                                    mp.playbackParams = mp.playbackParams.setSpeed(playbackSpeed)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SleekPlayer", "Failed to set initial speed", e)
+                                }
+                                start()
+                            }
+                        }
+                    },
+                    update = { view ->
+                        mediaPlayerInstance?.let { mp ->
+                            try {
+                                if (isPlaying) {
+                                    if (!view.isPlaying) view.start()
+                                } else {
+                                    if (view.isPlaying) view.pause()
+                                }
+                                val params = mp.playbackParams
+                                if (params.speed != playbackSpeed) {
+                                    mp.playbackParams = params.setSpeed(playbackSpeed)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SleekPlayer", "Error updating playback params", e)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Controls (Speed Selection and Play/Pause)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Play / Pause Button
+                Button(
+                    onClick = { isPlaying = !isPlaying },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isPlaying) Color.White.copy(alpha = 0.1f) else sleekAccent,
+                        contentColor = if (isPlaying) Color.White else Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = if (isPlaying) "PAUSAR" else "PLAY",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // Speed Selectors
+                Row(
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf(0.25f, 0.5f, 1.0f).forEach { speed ->
+                        val isSelected = playbackSpeed == speed
+                        val speedLabel = when (speed) {
+                            0.25f -> "0.25x 🐢"
+                            0.5f -> "0.5x 🏃"
+                            else -> "1.0x ⚡"
+                        }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) sleekAccent else Color.Transparent)
+                                .clickable {
+                                    playbackSpeed = speed
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = speedLabel,
+                                color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.6f),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Share Button
+            Button(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "video/mp4"
+                            val file = java.io.File(videoPath)
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file
+                            )
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(intent, "Compartilhar Replay"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Erro ao compartilhar replay: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = sleekAccent,
+                    contentColor = Color.Black
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text(
+                    text = "COMPARTILHAR REPLAY ⚽",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp
+                )
+            }
         }
     }
 }

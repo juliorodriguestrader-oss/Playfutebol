@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.util.LinkedList
 
+data class ReplayResult(val displayPath: String, val playablePath: String)
+
 class ReplayBufferManager(private val context: Context) {
     private val TAG = "ReplayBufferManager"
 
@@ -208,9 +210,9 @@ class ReplayBufferManager(private val context: Context) {
     /**
      * Concatenates the current sliding buffer and saves it as an MP4 to the user's gallery in "Replay Futebol"
      *
-     * @return Absolute file path of the saved video if successful, null otherwise
+     * @return ReplayResult containing gallery path and direct playable cache path if successful, null otherwise
      */
-    suspend fun saveCurrentReplay(): String? = withContext(Dispatchers.IO) {
+    suspend fun saveCurrentReplay(): ReplayResult? = withContext(Dispatchers.IO) {
         if (_isSaving.value) return@withContext null
         _isSaving.value = true
 
@@ -265,6 +267,15 @@ class ReplayBufferManager(private val context: Context) {
 
             // 3. Move/save the merged file to the public Gallery folder "Replay Futebol"
             val savedUriStr = saveVideoToGallery(tempMergedFile)
+
+            // Keep a local copy for immediate preview inside the app!
+            val previewFile = File(context.cacheDir, "last_replay_preview.mp4")
+            try {
+                tempMergedFile.copyTo(previewFile, overwrite = true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to copy preview file", e)
+            }
+
             tempMergedFile.delete()
 
             // 4. Resume continuous buffering immediately so user can keep capturing
@@ -275,7 +286,11 @@ class ReplayBufferManager(private val context: Context) {
                 }
             }
 
-            return@withContext savedUriStr
+            if (savedUriStr != null) {
+                return@withContext ReplayResult(savedUriStr, previewFile.absolutePath)
+            } else {
+                return@withContext null
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error saving replay", e)
