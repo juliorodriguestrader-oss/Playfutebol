@@ -1,0 +1,6 @@
+{
+  "name": "Replay Futebol",
+  "description": "Aplicativo nativo de Replay Instantâneo para Futebol com buffer circular de até 120 segundos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
