@@ -96,6 +96,7 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
     val isSaving by replayBufferManager.isSaving.collectAsState()
     val currentBufferMs by replayBufferManager.currentBufferDurationMs.collectAsState()
     val bufferLimitSeconds by replayBufferManager.bufferLimitSeconds.collectAsState()
+    val statusMessage by replayBufferManager.statusMessage.collectAsState()
 
     // Sleek Accent Colors
     val sleekAccent = Color(0xFFB1F203) // Neon lime/yellow-green
@@ -603,7 +604,7 @@ fun ReplayAppScreen(replayBufferManager: ReplayBufferManager) {
                                         .background(Color(0xFF22C55E))
                         )
                         Text(
-                            text = "READY TO CAPTURE / REPLAY FUTEBOL FOLDER",
+                            text = statusMessage.uppercase(),
                             color = Color.White.copy(alpha = 0.4f),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,

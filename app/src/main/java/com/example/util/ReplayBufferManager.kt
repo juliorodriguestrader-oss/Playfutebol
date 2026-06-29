@@ -40,6 +40,10 @@ class ReplayBufferManager(private val context: Context) {
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
+    // Flow representing a user-facing diagnostic status message
+    private val _statusMessage = MutableStateFlow("Pronto para gravar")
+    val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
+
     // Queue of segments currently in the sliding window buffer
     private val segmentQueue = LinkedList<VideoSegment>()
 
@@ -76,6 +80,7 @@ class ReplayBufferManager(private val context: Context) {
     fun startBuffering() {
         if (_isBuffering.value) return
         _isBuffering.value = true
+        _statusMessage.value = "Iniciando buffering..."
         Log.d(TAG, "Starting circular buffering loop...")
         startNextSegment()
     }
@@ -89,6 +94,7 @@ class ReplayBufferManager(private val context: Context) {
         activeRecording?.stop()
         activeRecording = null
         clearAllSegments()
+        _statusMessage.value = "Gravação parada e limpa."
         Log.d(TAG, "Buffering stopped and buffer cleared.")
     }
 
@@ -98,6 +104,13 @@ class ReplayBufferManager(private val context: Context) {
     private fun startNextSegment() {
         val capture = videoCapture
         if (capture == null || !_isBuffering.value || isFinalizingForSave) {
+            val reason = when {
+                capture == null -> "Aguardando câmera..."
+                !_isBuffering.value -> "Buffering inativo"
+                isFinalizingForSave -> "Finalizando para salvar"
+                else -> "Aguardando"
+            }
+            _statusMessage.value = "Buffer suspenso: $reason"
             Log.d(TAG, "Cannot start next segment. captureIsNull=${capture == null}, isBuffering=${_isBuffering.value}, isSaving=$isFinalizingForSave")
             return
         }
@@ -123,6 +136,7 @@ class ReplayBufferManager(private val context: Context) {
             }
 
             activeRecording = recording
+            _statusMessage.value = "Gravando trecho..."
 
             // Schedule this segment to stop after the target duration (5 seconds)
             segmentJob?.cancel()
@@ -135,6 +149,7 @@ class ReplayBufferManager(private val context: Context) {
             }
 
         } catch (e: Exception) {
+            _statusMessage.value = "Falha ao gravar: ${e.message}"
             Log.e(TAG, "Error starting segment recording", e)
             _isBuffering.value = false
         }
@@ -152,12 +167,16 @@ class ReplayBufferManager(private val context: Context) {
                     segmentQueue.add(VideoSegment(file, durationMs))
                     trimBuffer()
                 }
+                val currentSeconds = _currentBufferDurationMs.value / 1000L
+                _statusMessage.value = "Trecho gravado. Buffer: ${currentSeconds}s / ${bufferLimitSeconds.value}s"
             } else {
                 file.delete()
+                _statusMessage.value = "Trecho muito curto descartado."
             }
         } else {
             // Delete file if error occurred
             file.delete()
+            _statusMessage.value = "Erro no trecho: código de erro $errorCode"
         }
 
         // Check if we were stopping this segment to finalize a save
